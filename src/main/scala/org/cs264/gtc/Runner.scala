@@ -15,7 +15,7 @@ import collection.JavaConversions._
 object Runner {
   def main(args: Array[String]) = {
     //println(getHotSearches(System.getProperty("number.of.days").toInt).size)
-    downloadCSV("ford,gas")
+    downloadCSV("ford,honda,mazda,toyota,nissan")
   }
 
   private def getHotSearches(numOfDays: Int): IndexedSeq[String] = {
@@ -72,8 +72,11 @@ object Runner {
     if (entity != null) {
       val inputStream = entity.getContent
       try {
-        for (line <- io.Source.fromInputStream(inputStream).getLines) {
-          println(line)
+        var i = 0
+        val startsWithDate = """^([a-zA-Z]{3}\s\d{1,2}\s\d{4})""".r
+        for (line <- io.Source.fromInputStream(inputStream).getLines if startsWithDate.findPrefixOf(line).isDefined) {
+          println(i + ">>>" + line)
+          i += 1
         }
       } finally {
         inputStream.close
