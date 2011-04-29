@@ -3,7 +3,6 @@ package org.cs264.gtc
 import org.joda.time.LocalDate
 import org.apache.http.client.HttpClient
 import org.apache.http.impl.client.DefaultHttpClient
-import collection.mutable.ListBuffer
 import org.apache.http.client.methods.{HttpPost, HttpGet}
 import org.apache.http.NameValuePair
 import org.apache.http.message.BasicNameValuePair
@@ -11,11 +10,12 @@ import org.apache.http.protocol.HTTP
 import org.apache.http.client.entity.UrlEncodedFormEntity
 import org.apache.http.util.EntityUtils
 import collection.JavaConversions._
+import collection.mutable.{ArrayBuffer, ListBuffer, Map}
 
 object Runner {
   def main(args: Array[String]) = {
     //println(getHotSearches(System.getProperty("number.of.days").toInt).size)
-    downloadCSV("ford,honda,mazda,toyota,nissan")
+    downloadCSV("ford","honda","mazda","toyota","nissan")
   }
 
   private def getHotSearches(numOfDays: Int): IndexedSeq[String] = {
@@ -48,7 +48,8 @@ object Runner {
     hotSearches.result
   }
 
-  private def downloadCSV(searchTerm: String) = {
+  private def downloadCSV(searchTerms: String*) = {
+    if (searchTerms.length > 5) throw new IllegalArgumentException("Google Trends accepts maximum of 5 search terms")
     val client: HttpClient = new DefaultHttpClient
     val post = new HttpPost("https://www.google.com/accounts/ClientLogin")
     val nvps = List[NameValuePair](new BasicNameValuePair("accountType", "GOOGLE"),
@@ -65,24 +66,35 @@ object Runner {
     } else {
       //TODO cover else case
     }
-    val httpGet = new HttpGet("http://www.google.com/trends/viz?q=" + searchTerm + "&graph=all_csv&sa=N")
+    val httpGet = new HttpGet("http://www.google.com/trends/viz?q=" + searchTerms.mkString(",") + "&graph=all_csv&sa=N")
     httpGet.addHeader("Cookie", sid)
     val responseGET = client.execute(httpGet)
+
+    val data = Map[String, ArrayBuffer[Float]]()
+    for (searchTerm <- searchTerms) data += (searchTerm -> new ArrayBuffer[Float]())
     val entity = responseGET.getEntity
+
     if (entity != null) {
       val inputStream = entity.getContent
       try {
-        var i = 0
         val startsWithDate = """^([a-zA-Z]{3}\s\d{1,2}\s\d{4})""".r
         for (line <- io.Source.fromInputStream(inputStream).getLines if startsWithDate.findPrefixOf(line).isDefined) {
-          println(i + ">>>" + line)
-          i += 1
+          println(line)
+          val results = line.split(',').drop(1)
+          var index = 0
+          for (searchTerm <- searchTerms) {
+            data.get(searchTerm).get += results(index).toFloat
+            index += 2
+          }
         }
+        // last entry contains just zeros, so remove it
+        for (searchTerm <- data)  searchTerm._2.remove(searchTerm._2.length - 1)
       } finally {
         inputStream.close
       }
     } else {
       //TODO cover else case
     }
+    println("\n" + data)
   }
 }
