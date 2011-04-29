@@ -14,8 +14,13 @@ import collection.mutable.{ArrayBuffer, ListBuffer, Map}
 
 object Runner {
   def main(args: Array[String]) = {
-    //println(getHotSearches(System.getProperty("number.of.days").toInt).size)
-    downloadCSV("ford","honda","mazda","toyota","nissan")
+    val hotSearches = getHotSearches(System.getProperty("number.of.days").toInt)
+    val groupedHotSearches = hotSearches.grouped(5)
+    val data = new ListBuffer[(String, Array[Float])]
+    for (hotSearch <- groupedHotSearches) {
+      data.appendAll(downloadCSV(hotSearch: _*))
+    }
+    println(data.result)
   }
 
   private def getHotSearches(numOfDays: Int): IndexedSeq[String] = {
@@ -79,7 +84,6 @@ object Runner {
       try {
         val startsWithDate = """^([a-zA-Z]{3}\s\d{1,2}\s\d{4})""".r
         for (line <- io.Source.fromInputStream(inputStream).getLines if startsWithDate.findPrefixOf(line).isDefined) {
-          println(line)
           val results = line.split(',').drop(1)
           var index = 0
           for (searchTerm <- searchTerms) {
@@ -95,6 +99,6 @@ object Runner {
     } else {
       //TODO cover else case
     }
-    println("\n" + data)
+    data.toList.map(entry => (entry._1, entry._2.toArray))
   }
 }
