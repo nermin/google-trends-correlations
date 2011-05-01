@@ -10,17 +10,32 @@ import org.apache.http.protocol.HTTP
 import org.apache.http.client.entity.UrlEncodedFormEntity
 import org.apache.http.util.EntityUtils
 import collection.JavaConversions._
-import collection.mutable.{ArrayBuffer, ListBuffer, Map}
+import collection.mutable.{ListBuffer, HashMap}
 
 object Runner {
   def main(args: Array[String]) = {
+
     val hotSearches = getHotSearches(System.getProperty("number.of.days").toInt)
-    val groupedHotSearches = hotSearches.grouped(5)
-    val data = new ListBuffer[(String, Array[Float])]
-    for (hotSearch <- groupedHotSearches) {
-      data.appendAll(downloadCSV(hotSearch: _*))
+    val data = new HashMap[String, List[Double]]
+    for (hotSearch <- hotSearches) data += (hotSearch -> downloadCSV(hotSearch))
+
+    for (outHS <- data) {
+      for (inHS <- data) {
+        calculateCorrelation((inHS._1, inHS._2),(outHS._1, outHS._2))
+      }
     }
-    println(data.result)
+  }
+
+  private def calculateCorrelation(termX: (String, List[Double]), termY: (String, List[Double])) = {
+    val n = termX._2.length
+    val sumX = termX._2.sum
+    val sumY = termY._2.sum
+    val sumXY = (termX._2, termY._2).zipped.map(_ * _).sum
+    val sumXSquare = termX._2.map(e => e * e).sum
+    val sumYSquare = termY._2.map(e => e * e).sum
+    val r = ((n * sumXY) - (sumX * sumX)) /
+      math.sqrt(((n * sumXSquare) - (sumX * sumX)) * ((n * sumYSquare) - (sumY * sumY)))
+    println(r)
   }
 
   private def getHotSearches(numOfDays: Int): IndexedSeq[String] = {
@@ -53,8 +68,7 @@ object Runner {
     hotSearches.result
   }
 
-  private def downloadCSV(searchTerms: String*) = {
-    if (searchTerms.length > 5) throw new IllegalArgumentException("Google Trends accepts maximum of 5 search terms")
+  private def downloadCSV(searchTerm: String) = {
     val client: HttpClient = new DefaultHttpClient
     val post = new HttpPost("https://www.google.com/accounts/ClientLogin")
     val nvps = List[NameValuePair](new BasicNameValuePair("accountType", "GOOGLE"),
@@ -71,12 +85,11 @@ object Runner {
     } else {
       //TODO cover else case
     }
-    val httpGet = new HttpGet("http://www.google.com/trends/viz?q=" + searchTerms.mkString(",") + "&graph=all_csv&sa=N")
+    val httpGet = new HttpGet("http://www.google.com/trends/viz?q=" + searchTerm + "&graph=all_csv&sa=N")
     httpGet.addHeader("Cookie", sid)
     val responseGET = client.execute(httpGet)
 
-    val data = Map[String, ArrayBuffer[Float]]()
-    for (searchTerm <- searchTerms) data += (searchTerm -> new ArrayBuffer[Float]())
+    val data = new ListBuffer[Double]
     val entity = responseGET.getEntity
 
     if (entity != null) {
@@ -84,21 +97,14 @@ object Runner {
       try {
         val startsWithDate = """^([a-zA-Z]{3}\s\d{1,2}\s\d{4})""".r
         for (line <- io.Source.fromInputStream(inputStream).getLines if startsWithDate.findPrefixOf(line).isDefined) {
-          val results = line.split(',').drop(1)
-          var index = 0
-          for (searchTerm <- searchTerms) {
-            data.get(searchTerm).get += results(index).toFloat
-            index += 2
-          }
+          data += line.split(',')(1).toDouble
         }
-        // last entry contains just zeros, so remove it
-        for (searchTerm <- data)  searchTerm._2.remove(searchTerm._2.length - 1)
       } finally {
         inputStream.close
       }
     } else {
       //TODO cover else case
     }
-    data.toList.map(entry => (entry._1, entry._2.toArray))
+    data.result
   }
 }
